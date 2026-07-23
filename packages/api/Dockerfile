@@ -1,4 +1,5 @@
 FROM node:22-alpine AS builder
+RUN apk add --no-cache openssl libc6-compat
 WORKDIR /app
 COPY package*.json ./
 COPY packages/api/package*.json ./packages/api/
@@ -8,6 +9,7 @@ RUN npx prisma generate --schema=packages/api/prisma/schema.prisma
 RUN npm run build:api
 
 FROM node:22-alpine AS runner
+RUN apk add --no-cache openssl libc6-compat
 WORKDIR /app/packages/api
 COPY package*.json /app/
 COPY packages/api/package*.json /app/packages/api/

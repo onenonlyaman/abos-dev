@@ -1,19 +1,42 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
-import { VehicleStatus } from '@prisma/client';
+import { Controller, Get, Post, Body, Query } from '@nestjs/common';
 import { FleetService } from './fleet.service';
-import { CreateVehicleDto } from './dto/create-vehicle.dto';
 
-@Controller('vehicles')
+@Controller('fleet')
 export class FleetController {
-  constructor(private readonly fleet: FleetService) {}
-
-  @Post()
-  create(@Body() dto: CreateVehicleDto) {
-    return this.fleet.createVehicle(dto);
-  }
+  constructor(private readonly fleetService: FleetService) {}
 
   @Get()
-  list(@Query('status') status?: VehicleStatus) {
-    return this.fleet.listVehicles(status);
+  listVehicles(@Query('projectId') projectId?: string) {
+    return this.fleetService.listVehicles(projectId);
+  }
+
+  @Get('maintenance')
+  getMaintenanceSchedules() {
+    return this.fleetService.getMaintenanceSchedules();
+  }
+
+  @Post('maintenance')
+  createMaintenanceSchedule(@Body() body: any) {
+    return this.fleetService.createMaintenanceSchedule(body);
+  }
+
+  @Get('fuel')
+  getFuelLogs() {
+    return this.fleetService.getFuelLogs();
+  }
+
+  @Post('fuel')
+  createFuelLog(@Body() body: any) {
+    return this.fleetService.createFuelLog(body);
+  }
+
+  @Get('amc')
+  getAmcContracts() {
+    return this.fleetService.getAmcContracts();
+  }
+
+  @Post('amc')
+  createAmcContract(@Body() body: any) {
+    return this.fleetService.createAmcContract(body);
   }
 }

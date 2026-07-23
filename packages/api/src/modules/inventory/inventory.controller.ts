@@ -1,24 +1,52 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
-import { CreateSkuDto } from './dto/create-sku.dto';
-import { AdjustStockDto } from './dto/adjust-stock.dto';
 
-@Controller('skus')
+@Controller('inventory')
 export class InventoryController {
-  constructor(private readonly inventory: InventoryService) {}
+  constructor(private readonly inventoryService: InventoryService) {}
 
-  @Post()
-  create(@Body() dto: CreateSkuDto) {
-    return this.inventory.createSku(dto);
+  @Get('skus')
+  getSkus(@Query('projectId') projectId?: string) {
+    return this.inventoryService.getSkus(projectId);
   }
 
-  @Get()
-  list(@Query('projectId') projectId?: string) {
-    return this.inventory.listSkus(projectId);
+  @Get('godowns')
+  getGodowns() {
+    return this.inventoryService.getGodowns();
   }
 
-  @Post(':id/adjust-stock')
-  adjust(@Param('id') id: string, @Body() dto: AdjustStockDto) {
-    return this.inventory.adjustStock(id, dto);
+  @Post('godowns')
+  createGodown(@Body() body: any) {
+    return this.inventoryService.createGodown(body);
+  }
+
+  @Get('transfers')
+  getStockTransfers() {
+    return this.inventoryService.getStockTransfers();
+  }
+
+  @Post('transfers')
+  createStockTransfer(@Body() body: any) {
+    return this.inventoryService.createStockTransfer(body);
+  }
+
+  @Get('issue-slips')
+  getMaterialIssueSlips() {
+    return this.inventoryService.getMaterialIssueSlips();
+  }
+
+  @Post('issue-slips')
+  createMaterialIssueSlip(@Body() body: any) {
+    return this.inventoryService.createMaterialIssueSlip(body);
+  }
+
+  @Get('audits')
+  getStockAudits() {
+    return this.inventoryService.getStockAudits();
+  }
+
+  @Post('audits')
+  createStockAudit(@Body() body: any) {
+    return this.inventoryService.createStockAudit(body);
   }
 }

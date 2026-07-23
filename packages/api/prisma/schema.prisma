@@ -7,7 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------- Enums ----------
+// ==========================================
+// ENUMS
+// ==========================================
 
 enum LeadState {
   new
@@ -33,6 +35,7 @@ enum UnitStatus {
   available
   held
   booked
+  blocked
 }
 
 enum BookingState {
@@ -72,13 +75,65 @@ enum VehicleStatus {
   decommissioned
 }
 
-// ---------- Core: SPV / Project / Unit ----------
+enum PriorityLevel {
+  low
+  medium
+  high
+  critical
+}
+
+enum SeverityLevel {
+  minor
+  major
+  critical
+  blocker
+}
+
+enum WorkflowStatus {
+  pending
+  approved
+  rejected
+  escalated
+}
+
+enum DocumentType {
+  agreement
+  kyc
+  approval
+  land_record
+  invoice
+  receipt
+  drawing
+  other
+}
+
+// ==========================================
+// KNOWLEDGE BASE (WIKI & PUBLIC HELPDESK)
+// ==========================================
+
+model KnowledgeArticle {
+  id        String   @id @default(uuid())
+  title     String
+  category  String   @default("General")
+  content   String
+  author    String   @default("Support Team")
+  views     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("knowledge_articles")
+}
+
+// ==========================================
+// CORE: SPV / PROJECT / TOWER / UNIT
+// ==========================================
 
 model Spv {
   id        String    @id @default(uuid())
   name      String
   legalName String
   gstin     String    @unique
+  pan       String?
   createdAt DateTime  @default(now())
   projects  Project[]
 
@@ -86,29 +141,60 @@ model Spv {
 }
 
 model Project {
-  id        String   @id @default(uuid())
-  spvId     String
-  spv       Spv      @relation(fields: [spvId], references: [id])
-  name      String
-  code      String   @unique
-  city      String
-  createdAt DateTime @default(now())
+  id             String           @id @default(uuid())
+  spvId          String
+  spv            Spv              @relation(fields: [spvId], references: [id])
+  name           String
+  code           String           @unique
+  city           String
+  location       String?
+  budgetTotal    Decimal          @default(0) @db.Decimal(16, 2)
+  startDate      DateTime?
+  expectedEndDate DateTime?
+  createdAt      DateTime         @default(now())
 
-  units       Unit[]
-  skus        Sku[]
-  budgetLines BudgetLine[]
-  tasks       Task[]
-  leads       Lead[]
+  towers         Tower[]
+  units          Unit[]
+  skus           Sku[]
+  budgetLines    BudgetLine[]
+  tasks          Task[]
+  leads          Lead[]
   purchaseOrders PurchaseOrder[]
-  vehicles    Vehicle[]
+  vehicles       Vehicle[]
+  milestones     Milestone[]
+  ganttTasks     GanttTask[]
+  dprs           DailyProgressReport[]
+  boqs           BillOfQuantities[]
+  inspections    QualityInspection[]
+  bankAccounts   BankAccount[]
+  contracts      ContractAgreement[]
+  landRecords    LandRecord[]
+  reraApprovals  ReraApproval[]
+  invoices       GstInvoice[]
+  godowns        Godown[]
 
   @@map("projects")
+}
+
+model Tower {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
+  name      String
+  code      String
+  floors    Int      @default(1)
+  units     Unit[]
+
+  @@unique([projectId, code])
+  @@map("towers")
 }
 
 model Unit {
   id        String     @id @default(uuid())
   projectId String
   project   Project    @relation(fields: [projectId], references: [id])
+  towerId   String?
+  tower     Tower?     @relation(fields: [towerId], references: [id])
   code      String
   floor     Int
   areaSqft  Decimal    @db.Decimal(10, 2)
@@ -125,205 +211,50 @@ model Unit {
   @@map("units")
 }
 
-// ---------- Sales CRM ----------
+model Role {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  permissions Permission[]
+  employees   Employee[]
 
-model Lead {
-  id             String      @id @default(uuid())
-  name           String
-  phone          String
-  email          String?
-  source         String
-  state          LeadState   @default(new)
-  lostReason     LostReason?
-  projectId      String?
-  project        Project?    @relation(fields: [projectId], references: [id])
-  unitId         String?
-  unit           Unit?       @relation(fields: [unitId], references: [id])
-  assignedToId   String?
-  assignedTo     Employee?   @relation(fields: [assignedToId], references: [id])
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-
-  @@index([phone])
-  @@index([state])
-  @@map("leads")
+  @@map("roles")
 }
 
-// ---------- Booking (core module) ----------
+model Permission {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  module      String
+  action      String
+  roles       Role[]
 
-model Booking {
-  id                String       @id @default(uuid())
-  unitId            String
-  unit              Unit         @relation(fields: [unitId], references: [id])
-  customerName      String
-  customerPhone     String
-  state             BookingState @default(draft)
-  holdExpiresAt     DateTime?
-  agreementSignedAt DateTime?
-  cancelledAt       DateTime?
-  cancelReason      String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-
-  payments Payment[]
-
-  @@index([state])
-  @@index([unitId])
-  @@map("bookings")
+  @@map("permissions")
 }
-
-model Payment {
-  id         String        @id @default(uuid())
-  bookingId  String
-  booking    Booking       @relation(fields: [bookingId], references: [id])
-  amount     Decimal       @db.Decimal(14, 2)
-  status     PaymentStatus @default(pending)
-  method     String
-  reference  String?
-  clearedAt  DateTime?
-  createdAt  DateTime      @default(now())
-
-  @@index([bookingId])
-  @@map("payments")
-}
-
-// ---------- Procurement ----------
-
-model Vendor {
-  id             String   @id @default(uuid())
-  name           String
-  gstin          String   @unique
-  qualityScore   Decimal  @db.Decimal(3, 2) @default(0)
-  createdAt      DateTime @default(now())
-
-  purchaseOrders PurchaseOrder[]
-
-  @@map("vendors")
-}
-
-model PurchaseOrder {
-  id             String              @id @default(uuid())
-  vendorId       String
-  vendor         Vendor              @relation(fields: [vendorId], references: [id])
-  projectId      String
-  project        Project             @relation(fields: [projectId], references: [id])
-  status         PurchaseOrderStatus @default(draft)
-  createdById    String
-  createdBy      Employee            @relation("po_creator", fields: [createdById], references: [id])
-  approvedById   String?
-  approvedBy     Employee?           @relation("po_approver", fields: [approvedById], references: [id])
-  createdAt      DateTime            @default(now())
-
-  lines PurchaseOrderLine[]
-
-  @@map("purchase_orders")
-}
-
-model PurchaseOrderLine {
-  id              String        @id @default(uuid())
-  purchaseOrderId String
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
-  skuId           String
-  sku             Sku           @relation(fields: [skuId], references: [id])
-  quantity        Decimal       @db.Decimal(14, 3)
-  actualCost      Decimal       @db.Decimal(14, 2)
-  actualUnitCost  Decimal       @db.Decimal(14, 4)
-  deviationFlagged Boolean      @default(false)
-
-  @@map("purchase_order_lines")
-}
-
-// ---------- Inventory ----------
-
-model Sku {
-  id           String   @id @default(uuid())
-  projectId    String
-  project      Project  @relation(fields: [projectId], references: [id])
-  code         String
-  name         String
-  uom          String
-  formula      String?
-  currentStock Decimal  @db.Decimal(14, 3) @default(0)
-  safetyStock  Decimal  @db.Decimal(14, 3) @default(0)
-  createdAt    DateTime @default(now())
-
-  budgetLines BudgetLine[]
-  poLines     PurchaseOrderLine[]
-
-  @@unique([projectId, code])
-  @@map("skus")
-}
-
-// ---------- Finance / Budget ----------
-
-model BudgetLine {
-  id               String   @id @default(uuid())
-  projectId        String
-  project          Project  @relation(fields: [projectId], references: [id])
-  skuId            String
-  sku              Sku      @relation(fields: [skuId], references: [id])
-  allocatedCap     Decimal  @db.Decimal(16, 2)
-  expectedQty      Decimal  @db.Decimal(14, 3)
-  consumedAmount   Decimal  @db.Decimal(16, 2) @default(0)
-  createdAt        DateTime @default(now())
-
-  @@unique([projectId, skuId])
-  @@map("budget_lines")
-}
-
-// ---------- Task Tracking ----------
-
-model Task {
-  id             String    @id @default(uuid())
-  projectId      String?
-  project        Project?  @relation(fields: [projectId], references: [id])
-  title          String
-  description    String?
-  assignerId     String
-  assigner       Employee  @relation("task_assigner", fields: [assignerId], references: [id])
-  assigneeId     String
-  assignee       Employee  @relation("task_assignee", fields: [assigneeId], references: [id])
-  startedAt      DateTime  @default(now())
-  targetDeadline DateTime
-  status         TaskStatus @default(open)
-  closedAt       DateTime?
-  closedEarly    Boolean   @default(false)
-
-  reassignments TaskReassignmentLog[]
-
-  @@map("tasks")
-}
-
-model TaskReassignmentLog {
-  id               String   @id @default(uuid())
-  taskId           String
-  task             Task     @relation(fields: [taskId], references: [id])
-  reassignedById   String
-  reassignedBy     Employee @relation("reassigner", fields: [reassignedById], references: [id])
-  fromAssigneeId   String
-  toAssigneeId     String
-  reason           String
-  createdAt        DateTime @default(now())
-
-  @@map("task_reassignment_logs")
-}
-
-// ---------- HR ----------
 
 model Employee {
   id        String   @id @default(uuid())
   name      String
   email     String   @unique
-  role      String
+  phone     String?
+  roleId    String?
+  roleRef   Role?    @relation(fields: [roleId], references: [id])
+  role      String   @default("Staff")
+  department String?
   createdAt DateTime @default(now())
 
-  sessions       EmployeeSession[]
-  leadsAssigned  Lead[]
-  tasksAssigned  Task[]                @relation("task_assignee")
-  tasksGiven     Task[]                @relation("task_assigner")
-  reassignments  TaskReassignmentLog[] @relation("reassigner")
-  posCreated     PurchaseOrder[]       @relation("po_creator")
-  posApproved    PurchaseOrder[]       @relation("po_approver")
+  sessions            EmployeeSession[]
+  leadsAssigned       Lead[]
+  tasksAssigned       Task[]                @relation("task_assignee")
+  tasksGiven          Task[]                @relation("task_assigner")
+  reassignments       TaskReassignmentLog[] @relation("reassigner")
+  posCreated          PurchaseOrder[]       @relation("po_creator")
+  posApproved         PurchaseOrder[]       @relation("po_approver")
+  dprsSubmitted       DailyProgressReport[]
+  qualityInspections QualityInspection[]
+  approvalsHandled    WorkflowExecution[]
+  attendances         AttendanceRecord[]
+  leaveRequests       LeaveRequest[]
+  payrollDisbursals   PayrollDisbursal[]
 
   @@map("employees")
 }
@@ -340,7 +271,803 @@ model EmployeeSession {
   @@map("employee_sessions")
 }
 
-// ---------- Fleet ----------
+model GstInvoice {
+  id            String        @id @default(uuid())
+  projectId     String?
+  project       Project?      @relation(fields: [projectId], references: [id])
+  invoiceNumber String        @unique
+  customerName  String
+  customerGstin String?
+  subtotal      Decimal       @db.Decimal(16, 2)
+  cgstAmount    Decimal       @default(0) @db.Decimal(16, 2)
+  sgstAmount    Decimal       @default(0) @db.Decimal(16, 2)
+  igstAmount    Decimal       @default(0) @db.Decimal(16, 2)
+  totalAmount   Decimal       @db.Decimal(16, 2)
+  status        PaymentStatus @default(pending)
+  issuedAt      DateTime      @default(now())
+  dueDate       DateTime
+  items         InvoiceItem[]
+
+  @@map("gst_invoices")
+}
+
+model InvoiceItem {
+  id          String     @id @default(uuid())
+  invoiceId   String
+  invoice     GstInvoice @relation(fields: [invoiceId], references: [id])
+  description String
+  hsnCode     String?
+  quantity    Decimal    @db.Decimal(14, 3)
+  rate        Decimal    @db.Decimal(14, 2)
+  amount      Decimal    @db.Decimal(16, 2)
+
+  @@map("invoice_items")
+}
+
+model CreditNote {
+  id          String   @id @default(uuid())
+  noteNumber  String   @unique
+  partyName   String
+  amount      Decimal  @db.Decimal(16, 2)
+  reason      String
+  issuedAt    DateTime @default(now())
+
+  @@map("credit_notes")
+}
+
+model DebitNote {
+  id          String   @id @default(uuid())
+  noteNumber  String   @unique
+  vendorName  String
+  amount      Decimal  @db.Decimal(16, 2)
+  reason      String
+  issuedAt    DateTime @default(now())
+
+  @@map("debit_notes")
+}
+
+model JournalEntry {
+  id          String   @id @default(uuid())
+  entryNumber String   @unique
+  accountName String
+  debit       Decimal  @default(0) @db.Decimal(16, 2)
+  credit      Decimal  @default(0) @db.Decimal(16, 2)
+  narration   String
+  createdAt   DateTime @default(now())
+
+  @@map("journal_entries")
+}
+
+model FixedAsset {
+  id              String   @id @default(uuid())
+  assetName       String
+  category        String
+  purchaseCost    Decimal  @db.Decimal(16, 2)
+  currentValue    Decimal  @db.Decimal(16, 2)
+  depreciationRate Decimal @db.Decimal(5, 2)
+  purchasedAt     DateTime
+
+  @@map("fixed_assets")
+}
+
+model AttendanceRecord {
+  id         String   @id @default(uuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  date       DateTime @default(now())
+  checkIn    DateTime
+  checkOut   DateTime?
+  status     String   @default("present")
+
+  @@map("attendance_records")
+}
+
+model LeaveRequest {
+  id         String   @id @default(uuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  leaveType  String
+  startDate  DateTime
+  endDate    DateTime
+  reason     String
+  status     String   @default("pending")
+
+  @@map("leave_requests")
+}
+
+model PayrollDisbursal {
+  id           String   @id @default(uuid())
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id])
+  monthYear    String
+  basicSalary  Decimal  @db.Decimal(14, 2)
+  allowances   Decimal  @default(0) @db.Decimal(14, 2)
+  deductions   Decimal  @default(0) @db.Decimal(14, 2)
+  netPayable   Decimal  @db.Decimal(14, 2)
+  disbursedAt  DateTime @default(now())
+
+  @@map("payroll_disbursals")
+}
+
+model JobPosting {
+  id          String   @id @default(uuid())
+  title       String
+  department  String
+  location    String
+  status      String   @default("open")
+  postedAt    DateTime @default(now())
+
+  @@map("job_postings")
+}
+
+model PerformanceReview {
+  id          String   @id @default(uuid())
+  employeeName String
+  reviewPeriod String
+  ratingScore Decimal  @db.Decimal(3, 2)
+  feedback    String
+  createdAt   DateTime @default(now())
+
+  @@map("performance_reviews")
+}
+
+model CommunicationCampaign {
+  id          String   @id @default(uuid())
+  title       String
+  channel     String
+  targetGroup String
+  message     String
+  sentCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@map("communication_campaigns")
+}
+
+model WhatsAppLog {
+  id          String   @id @default(uuid())
+  recipient   String
+  templateName String
+  payload     String
+  status      String   @default("delivered")
+  sentAt      DateTime @default(now())
+
+  @@map("whatsapp_logs")
+}
+
+model SmsLog {
+  id          String   @id @default(uuid())
+  recipient   String
+  message     String
+  status      String   @default("sent")
+  sentAt      DateTime @default(now())
+
+  @@map("sms_logs")
+}
+
+model CallLog {
+  id          String   @id @default(uuid())
+  callerName  String
+  phone       String
+  durationSec Int
+  notes       String?
+  calledAt    DateTime @default(now())
+
+  @@map("call_logs")
+}
+
+model PurchaseRequisition {
+  id          String   @id @default(uuid())
+  requisitionNo String @unique
+  requestedBy String
+  department  String
+  totalEstimatedCost Decimal @db.Decimal(16, 2)
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+
+  @@map("purchase_requisitions")
+}
+
+model Rfq {
+  id          String        @id @default(uuid())
+  rfqNumber   String        @unique
+  title       String
+  deadline    DateTime
+  status      String        @default("open")
+  quotes      VendorQuote[]
+
+  @@map("rfqs")
+}
+
+model VendorQuote {
+  id          String   @id @default(uuid())
+  rfqId       String
+  rfq         Rfq      @relation(fields: [rfqId], references: [id])
+  vendorName  String
+  quotedRate  Decimal  @db.Decimal(16, 2)
+  deliveryDays Int
+  selected    Boolean  @default(false)
+
+  @@map("vendor_quotes")
+}
+
+model GoodsReceiptNote {
+  id            String   @id @default(uuid())
+  grnNumber     String   @unique
+  poNumber      String
+  vendorName    String
+  receivedItems String
+  inspectedBy   String
+  receivedAt    DateTime @default(now())
+
+  @@map("goods_receipt_notes")
+}
+
+model Godown {
+  id          String   @id @default(uuid())
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id])
+  name        String
+  location    String
+  capacitySqft Int
+
+  transfersFrom StockTransfer[] @relation("transfer_from")
+  transfersTo   StockTransfer[] @relation("transfer_to")
+
+  @@map("godowns")
+}
+
+model StockTransfer {
+  id            String   @id @default(uuid())
+  transferNo    String   @unique
+  fromGodownId  String
+  fromGodown    Godown   @relation("transfer_from", fields: [fromGodownId], references: [id])
+  toGodownId    String
+  toGodown      Godown   @relation("transfer_to", fields: [toGodownId], references: [id])
+  skuName       String
+  quantity      Decimal  @db.Decimal(14, 3)
+  transferredAt DateTime @default(now())
+
+  @@map("stock_transfers")
+}
+
+model MaterialIssueSlip {
+  id          String   @id @default(uuid())
+  issueNumber String   @unique
+  contractor  String
+  materialName String
+  quantity    Decimal  @db.Decimal(14, 3)
+  issuedAt    DateTime @default(now())
+
+  @@map("material_issue_slips")
+}
+
+model StockAudit {
+  id          String   @id @default(uuid())
+  auditedBy   String
+  location    String
+  discrepancy String
+  auditedAt   DateTime @default(now())
+
+  @@map("stock_audits")
+}
+
+model SupportTicket {
+  id          String   @id @default(uuid())
+  ticketNumber String  @unique
+  customerName String
+  subject     String
+  category    String
+  priority    PriorityLevel @default(medium)
+  status      TaskStatus    @default(open)
+  createdAt   DateTime      @default(now())
+
+  @@map("support_tickets")
+}
+
+model CustomerFeedback {
+  id           String   @id @default(uuid())
+  customerName String
+  rating       Int
+  comments     String
+  createdAt    DateTime @default(now())
+
+  @@map("customer_feedbacks")
+}
+
+model BrokerCommission {
+  id          String   @id @default(uuid())
+  brokerName  String
+  unitCode    String
+  commissionAmount Decimal @db.Decimal(14, 2)
+  status      String   @default("pending")
+
+  @@map("broker_commissions")
+}
+
+model ArchitecturalDrawing {
+  id          String   @id @default(uuid())
+  title       String
+  drawingCode String
+  version     String   @default("v1.0")
+  fileUrl     String
+  approvedBy  String?
+  createdAt   DateTime @default(now())
+
+  @@map("architectural_drawings")
+}
+
+model OcrExtractLog {
+  id          String   @id @default(uuid())
+  fileName    String
+  extractedText String
+  processedAt DateTime @default(now())
+
+  @@map("ocr_extract_logs")
+}
+
+model DigitalSignatureLog {
+  id          String   @id @default(uuid())
+  documentTitle String
+  signerName  String
+  signedAt    DateTime @default(now())
+  certificateHash String
+
+  @@map("digital_signature_logs")
+}
+
+model MaintenanceSchedule {
+  id          String   @id @default(uuid())
+  assetName   String
+  maintenanceType String
+  scheduledDate DateTime
+  status      String   @default("scheduled")
+
+  @@map("maintenance_schedules")
+}
+
+model FuelLog {
+  id          String   @id @default(uuid())
+  vehicleName String
+  fuelLitres  Decimal  @db.Decimal(10, 2)
+  costAmount  Decimal  @db.Decimal(12, 2)
+  loggedAt    DateTime @default(now())
+
+  @@map("fuel_logs")
+}
+
+model AmcContract {
+  id          String   @id @default(uuid())
+  providerName String
+  equipmentCovered String
+  validTo     DateTime
+  annualCost  Decimal  @db.Decimal(14, 2)
+
+  @@map("amc_contracts")
+}
+
+model Lead {
+  id           String      @id @default(uuid())
+  name         String
+  phone        String
+  email        String?
+  source       String
+  state        LeadState   @default(new)
+  lostReason   LostReason?
+  projectId    String?
+  project      Project?    @relation(fields: [projectId], references: [id])
+  unitId       String?
+  unit         Unit?       @relation(fields: [unitId], references: [id])
+  assignedToId String?
+  assignedTo   Employee?   @relation(fields: [assignedToId], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  timeline CustomerInteraction[]
+
+  @@index([phone])
+  @@index([state])
+  @@map("leads")
+}
+
+model Booking {
+  id                String       @id @default(uuid())
+  unitId            String
+  unit              Unit         @relation(fields: [unitId], references: [id])
+  customerName      String
+  customerPhone     String
+  customerEmail     String?
+  state             BookingState @default(draft)
+  holdExpiresAt     DateTime?
+  agreementSignedAt DateTime?
+  cancelledAt       DateTime?
+  cancelReason      String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  payments Payment[]
+  timeline CustomerInteraction[]
+
+  @@index([state])
+  @@index([unitId])
+  @@map("bookings")
+}
+
+model Payment {
+  id        String        @id @default(uuid())
+  bookingId String
+  booking   Booking       @relation(fields: [bookingId], references: [id])
+  amount    Decimal       @db.Decimal(14, 2)
+  status    PaymentStatus @default(pending)
+  method    String
+  reference String?
+  clearedAt DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([bookingId])
+  @@map("payments")
+}
+
+model CustomerInteraction {
+  id          String   @id @default(uuid())
+  leadId      String?
+  lead        Lead?    @relation(fields: [leadId], references: [id])
+  bookingId   String?
+  booking     Booking? @relation(fields: [bookingId], references: [id])
+  type        String
+  summary     String
+  details     String?
+  performedBy String
+  createdAt   DateTime @default(now())
+
+  @@map("customer_interactions")
+}
+
+model Milestone {
+  id            String      @id @default(uuid())
+  projectId     String
+  project       Project     @relation(fields: [projectId], references: [id])
+  title         String
+  targetDate    DateTime
+  actualDate    DateTime?
+  completionPct Decimal     @default(0) @db.Decimal(5, 2)
+  status        TaskStatus  @default(open)
+  ganttTasks    GanttTask[]
+
+  @@map("milestones")
+}
+
+model GanttTask {
+  id             String     @id @default(uuid())
+  projectId      String
+  project        Project    @relation(fields: [projectId], references: [id])
+  milestoneId    String?
+  milestone      Milestone? @relation(fields: [milestoneId], references: [id])
+  taskName       String
+  startDate      DateTime
+  endDate        DateTime
+  progress       Decimal    @default(0) @db.Decimal(5, 2)
+  dependencies   String?
+  assignedWorker String?
+
+  @@map("gantt_tasks")
+}
+
+model DailyProgressReport {
+  id            String          @id @default(uuid())
+  projectId     String
+  project       Project         @relation(fields: [projectId], references: [id])
+  reporterId    String
+  reporter      Employee        @relation(fields: [reporterId], references: [id])
+  date          DateTime        @default(now())
+  workDone      String
+  labourCount   Int             @default(0)
+  weather       String?
+  blockers      String?
+  photos        ProgressPhoto[]
+  labourRecords LabourRecord[]
+
+  @@map("daily_progress_reports")
+}
+
+model ProgressPhoto {
+  id        String              @id @default(uuid())
+  dprId     String
+  dpr       DailyProgressReport @relation(fields: [dprId], references: [id])
+  url       String
+  caption   String?
+  createdAt DateTime            @default(now())
+
+  @@map("progress_photos")
+}
+
+model LabourRecord {
+  id        String              @id @default(uuid())
+  dprId     String
+  dpr       DailyProgressReport @relation(fields: [dprId], references: [id])
+  trade     String
+  headcount Int
+  dailyRate Decimal             @db.Decimal(10, 2)
+  totalWage Decimal             @db.Decimal(12, 2)
+
+  @@map("labour_records")
+}
+
+model BillOfQuantities {
+  id          String    @id @default(uuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id])
+  title       String
+  version     String    @default("v1.0")
+  totalBudget Decimal   @db.Decimal(16, 2)
+  createdAt   DateTime  @default(now())
+  items       BoqItem[]
+
+  @@map("bill_of_quantities")
+}
+
+model BoqItem {
+  id            String           @id @default(uuid())
+  boqId         String
+  boq           BillOfQuantities @relation(fields: [boqId], references: [id])
+  itemCode      String
+  description   String
+  uom           String
+  estimatedQty  Decimal          @db.Decimal(14, 3)
+  estimatedRate Decimal          @db.Decimal(14, 2)
+  estimatedCost Decimal          @db.Decimal(16, 2)
+  actualQty     Decimal          @default(0) @db.Decimal(14, 3)
+  actualCost    Decimal          @default(0) @db.Decimal(16, 2)
+
+  @@map("boq_items")
+}
+
+model QualityInspection {
+  id          String       @id @default(uuid())
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id])
+  inspectorId String
+  inspector   Employee     @relation(fields: [inspectorId], references: [id])
+  location    String
+  score       Decimal      @db.Decimal(5, 2)
+  status      TaskStatus   @default(open)
+  inspectedAt DateTime     @default(now())
+  defects     DefectSnag[]
+
+  @@map("quality_inspections")
+}
+
+model DefectSnag {
+  id           String            @id @default(uuid())
+  inspectionId String
+  inspection   QualityInspection @relation(fields: [inspectionId], references: [id])
+  title        String
+  description  String
+  severity     SeverityLevel     @default(minor)
+  assignedTo   String?
+  rectifiedAt  DateTime?
+  status       TaskStatus        @default(open)
+
+  @@map("defect_snags")
+}
+
+model Vendor {
+  id            String          @id @default(uuid())
+  name          String
+  gstin         String          @unique
+  contactPerson String?
+  email         String?
+  phone         String?
+  qualityScore  Decimal         @default(0) @db.Decimal(3, 2)
+  createdAt     DateTime        @default(now())
+
+  purchaseOrders PurchaseOrder[]
+
+  @@map("vendors")
+}
+
+model PurchaseOrder {
+  id           String              @id @default(uuid())
+  vendorId     String
+  vendor       Vendor              @relation(fields: [vendorId], references: [id])
+  projectId    String
+  project      Project             @relation(fields: [projectId], references: [id])
+  status       PurchaseOrderStatus @default(draft)
+  createdById  String
+  createdBy    Employee            @relation("po_creator", fields: [createdById], references: [id])
+  approvedById String?
+  approvedBy   Employee?           @relation("po_approver", fields: [approvedById], references: [id])
+  createdAt    DateTime            @default(now())
+
+  lines PurchaseOrderLine[]
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id               String        @id @default(uuid())
+  purchaseOrderId  String
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  skuId            String
+  sku              Sku           @relation(fields: [skuId], references: [id])
+  quantity         Decimal       @db.Decimal(14, 3)
+  actualCost       Decimal       @db.Decimal(14, 2)
+  actualUnitCost   Decimal       @db.Decimal(14, 4)
+  deviationFlagged Boolean       @default(false)
+
+  @@map("purchase_order_lines")
+}
+
+model Sku {
+  id           String   @id @default(uuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id])
+  code         String
+  name         String
+  uom          String
+  formula      String?
+  currentStock Decimal  @default(0) @db.Decimal(14, 3)
+  safetyStock  Decimal  @default(0) @db.Decimal(14, 3)
+  createdAt    DateTime @default(now())
+
+  budgetLines BudgetLine[]
+  poLines     PurchaseOrderLine[]
+
+  @@unique([projectId, code])
+  @@map("skus")
+}
+
+model BudgetLine {
+  id             String   @id @default(uuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  skuId          String
+  sku            Sku      @relation(fields: [skuId], references: [id])
+  allocatedCap   Decimal  @db.Decimal(16, 2)
+  expectedQty    Decimal  @db.Decimal(14, 3)
+  consumedAmount Decimal  @default(0) @db.Decimal(16, 2)
+  createdAt      DateTime @default(now())
+
+  @@unique([projectId, skuId])
+  @@map("budget_lines")
+}
+
+model BankAccount {
+  id            String            @id @default(uuid())
+  projectId     String?
+  project       Project?          @relation(fields: [projectId], references: [id])
+  bankName      String
+  accountNumber String            @unique
+  ifsc          String
+  branch        String
+  balance       Decimal           @default(0) @db.Decimal(16, 2)
+  accountType   String            @default("Current")
+  transactions  BankTransaction[]
+
+  @@map("bank_accounts")
+}
+
+model BankTransaction {
+  id            String        @id @default(uuid())
+  bankAccountId String
+  bankAccount   BankAccount   @relation(fields: [bankAccountId], references: [id])
+  type          String
+  amount        Decimal       @db.Decimal(16, 2)
+  reference     String?
+  payee         String
+  category      String
+  status        PaymentStatus @default(cleared)
+  transactedAt  DateTime      @default(now())
+
+  @@map("bank_transactions")
+}
+
+model ContractAgreement {
+  id          String   @id @default(uuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id])
+  partyName   String
+  title       String
+  validFrom   DateTime
+  validTo     DateTime
+  documentUrl String?
+  status      String   @default("active")
+
+  @@map("contract_agreements")
+}
+
+model LandRecord {
+  id              String   @id @default(uuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id])
+  surveyNumber    String
+  landAreaAcre    Decimal  @db.Decimal(10, 4)
+  ownerName       String
+  clearanceStatus String   @default("cleared")
+
+  @@map("land_records")
+}
+
+model ReraApproval {
+  id             String   @id @default(uuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  registrationNo String   @unique
+  validUntil     DateTime
+  status         String   @default("approved")
+
+  @@map("rera_approvals")
+}
+
+model DocumentVault {
+  id         String       @id @default(uuid())
+  title      String
+  docType    DocumentType @default(other)
+  url        String
+  version    String       @default("1.0")
+  uploadedAt DateTime     @default(now())
+
+  @@map("document_vault")
+}
+
+model WorkflowDefinition {
+  id         String              @id @default(uuid())
+  name       String              @unique
+  module     String
+  trigger    String
+  executions WorkflowExecution[]
+
+  @@map("workflow_definitions")
+}
+
+model WorkflowExecution {
+  id          String             @id @default(uuid())
+  workflowId  String
+  workflow    WorkflowDefinition @relation(fields: [workflowId], references: [id])
+  entityId    String
+  status      WorkflowStatus     @default(pending)
+  step        Int                @default(1)
+  handledById String?
+  handledBy   Employee?          @relation(fields: [handledById], references: [id])
+  comments    String?
+  createdAt   DateTime           @default(now())
+
+  @@map("workflow_executions")
+}
+
+model Task {
+  id             String     @id @default(uuid())
+  projectId      String?
+  project        Project?   @relation(fields: [projectId], references: [id])
+  title          String
+  description    String?
+  assignerId     String
+  assigner       Employee   @relation("task_assigner", fields: [assignerId], references: [id])
+  assigneeId     String
+  assignee       Employee   @relation("task_assignee", fields: [assigneeId], references: [id])
+  startedAt      DateTime   @default(now())
+  targetDeadline DateTime
+  status         TaskStatus @default(open)
+  closedAt       DateTime?
+  closedEarly    Boolean    @default(false)
+
+  reassignments TaskReassignmentLog[]
+
+  @@map("tasks")
+}
+
+model TaskReassignmentLog {
+  id             String   @id @default(uuid())
+  taskId         String
+  task           Task     @relation(fields: [taskId], references: [id])
+  reassignedById String
+  reassignedBy   Employee @relation("reassigner", fields: [reassignedById], references: [id])
+  fromAssigneeId String
+  toAssigneeId   String
+  reason         String
+  createdAt      DateTime @default(now())
+
+  @@map("task_reassignment_logs")
+}
 
 model Vehicle {
   id                String        @id @default(uuid())

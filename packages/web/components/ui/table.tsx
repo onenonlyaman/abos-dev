@@ -10,20 +10,20 @@ export function Table({ children }: { children: React.ReactNode }) {
 
 export function Thead({ children }: { children: React.ReactNode }) {
   return (
-    <thead className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-500">
+    <thead className="border-b border-line text-[11px] uppercase tracking-[0.05em] text-ink-3">
       <tr>{children}</tr>
     </thead>
   );
 }
 
 export function Th({ children, className }: { children?: React.ReactNode; className?: string }) {
-  return <th className={cn('px-5 py-2.5 font-medium', className)}>{children}</th>;
+  return <th className={cn('px-5 py-2.5 font-semibold', className)}>{children}</th>;
 }
 
 export function Td({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <td className={cn('px-5 py-3 text-zinc-800', className)}>{children}</td>;
+  return <td className={cn('px-5 py-3 text-ink-2', className)}>{children}</td>;
 }
 
 export function Tr({ children }: { children: React.ReactNode }) {
-  return <tr className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50">{children}</tr>;
+  return <tr className="border-b border-line last:border-0 hover:bg-surface-2">{children}</tr>;
 }

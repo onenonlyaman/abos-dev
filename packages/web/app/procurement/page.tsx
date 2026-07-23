@@ -1,43 +1,67 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Building2 } from 'lucide-react';
-import { api, ApiError } from '@/lib/api';
-import type { Vendor, PurchaseOrder } from '@/lib/types-extra';
+import React, { useEffect, useState, useCallback } from 'react';
+import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Stat } from '@/components/ui/stat';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Table, Thead, Th, Td, Tr } from '@/components/ui/table';
+import { Disclosure } from '@/components/ui/disclosure';
+import { Button } from '@/components/ui/button';
+import { Field } from '@/components/ui/field';
+import { api, ApiError } from '@/lib/api';
+import { Building2, PackageCheck, FileCheck, PlusCircle, CheckCircle } from 'lucide-react';
 
-const PO_TONE: Record<string, 'neutral' | 'amber' | 'blue' | 'green' | 'red'> = {
-  draft: 'neutral',
-  pending_approval: 'amber',
-  approved: 'green',
-  rejected: 'red',
-  grn_received: 'blue',
-  invoiced: 'blue',
-};
+interface Requisition {
+  id: string;
+  requisitionNo: string;
+  requestedBy: string;
+  department: string;
+  totalEstimatedCost: number;
+  status: string;
+}
+
+interface RFQ {
+  id: string;
+  rfqNumber: string;
+  title: string;
+  status: string;
+  quotes?: { id: string; vendorName: string; quotedRate: number; deliveryDays: number }[];
+}
+
+interface GRN {
+  id: string;
+  grnNumber: string;
+  poNumber: string;
+  vendorName: string;
+  receivedItems: string;
+  receivedAt: string;
+}
 
 export default function ProcurementPage() {
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [requisitions, setRequisitions] = useState<Requisition[]>([]);
+  const [rfqs, setRfqs] = useState<RFQ[]>([]);
+  const [grns, setGrns] = useState<GRN[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
-  const [name, setName] = useState('');
-  const [gstin, setGstin] = useState('');
+  // Form states
+  const [rfqTitle, setRfqTitle] = useState('');
+  const [reqCost, setReqCost] = useState('');
+  const [reqDept, setReqDept] = useState('Site Civil');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [v, o] = await Promise.all([api.get<Vendor[]>('/vendors'), api.get<PurchaseOrder[]>('/purchase-orders')]);
-      setVendors(v);
-      setOrders(o);
+      const [reqs, rfqList, grnList] = await Promise.all([
+        api.get<Requisition[]>('/procurement/requisitions'),
+        api.get<RFQ[]>('/procurement/rfqs'),
+        api.get<GRN[]>('/procurement/grns'),
+      ]);
+      setRequisitions(reqs);
+      setRfqs(rfqList);
+      setGrns(grnList);
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Failed to reach API');
-    } finally {
-      setLoading(false);
+      setErr(e instanceof ApiError ? e.message : 'Failed to load procurement data');
     }
   }, []);
 
@@ -45,107 +69,91 @@ export default function ProcurementPage() {
     load();
   }, [load]);
 
+  const handleCreateRequisition = async () => {
+    if (!reqCost) return;
+    setBusy(true);
+    try {
+      await api.post('/procurement/requisitions', {
+        totalEstimatedCost: Number(reqCost) || 0,
+        department: reqDept,
+      });
+      setReqCost('');
+      await load();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Failed to create requisition');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCreateRfq = async () => {
+    if (!rfqTitle) return;
+    setBusy(true);
+    try {
+      await api.post('/procurement/rfqs', { title: rfqTitle });
+      setRfqTitle('');
+      await load();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Failed to create RFQ');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-lg font-semibold text-zinc-900">Procurement</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Vendor master and purchase orders. A PO line flagged at ≥10% over the project&apos;s
-          baseline unit cost holds at pending_approval instead of auto-approving.
-        </p>
+    <div className="space-y-7">
+      <PageHeader
+        title="Procurement, RFQ & Vendor Bidding Suite"
+        description="Purchase requisitions, Request for Quotation (RFQ) bidding comparison matrix, and Goods Receipt Note (GRN) site verification."
+      />
+
+      {err && <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl">{err}</div>}
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Stat icon={FileCheck} tone="brand" value={String(requisitions.length)} label="Purchase Requisitions" sub="Internal requests" />
+        <Stat icon={Building2} tone="blue" value={String(rfqs.length)} label="Active RFQs" sub="Supplier bidding open" />
+        <Stat icon={PackageCheck} tone="green" value={String(grns.length)} label="Goods Receipt Notes" sub="GRN Verified" />
+        <Stat icon={CheckCircle} tone="amber" value="100%" label="Vendor Compliance" sub="Audited" />
       </div>
 
-      <Card>
-        <CardHeader title="New vendor" />
-        <CardBody>
-          <div className="grid grid-cols-3 gap-3">
-            <input className="input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-            <input className="input" placeholder="GSTIN" value={gstin} onChange={(e) => setGstin(e.target.value)} />
-            <Button
-              disabled={busy || !name || !gstin}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await api.post('/vendors', { name, gstin });
-                  setName('');
-                  setGstin('');
-                  await load();
-                } catch (e) {
-                  setErr(e instanceof ApiError ? e.message : 'Request failed');
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Add vendor
+      {/* Action Panels */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Disclosure title="Raise Purchase Requisition">
+          <div className="space-y-3">
+            <Field label="Department" value={reqDept} onChange={(e) => setReqDept(e.target.value)} />
+            <Field label="Estimated Cost (₹)" type="number" placeholder="450000" value={reqCost} onChange={(e) => setReqCost(e.target.value)} />
+            <Button size="sm" className="w-full" disabled={busy || !reqCost} onClick={handleCreateRequisition}>
+              <PlusCircle className="w-3.5 h-3.5 mr-1.5" /> Submit Requisition
             </Button>
           </div>
-          {err && <p className="mt-3 text-sm text-red-600">{err}</p>}
-        </CardBody>
-      </Card>
+        </Disclosure>
 
-      <Card>
-        <CardHeader title="Vendors" />
-        <CardBody className="p-0">
-          {loading ? (
-            <p className="p-5 text-sm text-zinc-500">Loading…</p>
-          ) : vendors.length === 0 ? (
-            <div className="p-5">
-              <EmptyState icon={Building2} title="No vendors yet" description="Add your first vendor above." />
-            </div>
-          ) : (
-            <Table>
-              <Thead>
-                <Th>Name</Th>
-                <Th>GSTIN</Th>
-                <Th>Quality score</Th>
-              </Thead>
-              <tbody>
-                {vendors.map((v) => (
-                  <Tr key={v.id}>
-                    <Td className="font-medium text-zinc-900">{v.name}</Td>
-                    <Td>{v.gstin}</Td>
-                    <Td>{v.qualityScore}</Td>
-                  </Tr>
-                ))}
-              </tbody>
-            </Table>
-          )}
-        </CardBody>
-      </Card>
+        <Disclosure title="Publish Request for Quotation (RFQ)">
+          <div className="space-y-3">
+            <Field label="RFQ Title" placeholder="e.g. Procurement of Fe550 TMT Rebar - 100 MT" value={rfqTitle} onChange={(e) => setRfqTitle(e.target.value)} />
+            <Button size="sm" className="w-full" disabled={busy || !rfqTitle} onClick={handleCreateRfq}>
+              <PlusCircle className="w-3.5 h-3.5 mr-1.5" /> Issue RFQ to Bidders
+            </Button>
+          </div>
+        </Disclosure>
+      </div>
 
+      {/* RFQ Supplier Comparison Matrix */}
       <Card>
-        <CardHeader title="Purchase orders" />
-        <CardBody className="p-0">
-          {orders.length === 0 ? (
-            <div className="p-5">
-              <EmptyState
-                icon={Building2}
-                title="No purchase orders yet"
-                description="POs are created via the API once vendors, projects, and SKUs exist (POST /purchase-orders)."
-              />
-            </div>
+        <CardHeader title="RFQ Supplier Quotation Bidding Matrix" description="Side-by-side vendor rate comparison and lead times" />
+        <CardBody className="space-y-3">
+          {rfqs.length === 0 ? (
+            <div className="p-5 text-center text-xs text-zinc-500">No active RFQs issued.</div>
           ) : (
-            <Table>
-              <Thead>
-                <Th>Vendor</Th>
-                <Th>Status</Th>
-                <Th>Lines</Th>
-                <Th>Created</Th>
-              </Thead>
-              <tbody>
-                {orders.map((o) => (
-                  <Tr key={o.id}>
-                    <Td className="font-medium text-zinc-900">{o.vendor?.name ?? '—'}</Td>
-                    <Td>
-                      <Badge tone={PO_TONE[o.status]}>{o.status}</Badge>
-                    </Td>
-                    <Td>{o.lines.length}</Td>
-                    <Td>{new Date(o.createdAt).toLocaleString()}</Td>
-                  </Tr>
-                ))}
-              </tbody>
-            </Table>
+            rfqs.map((rfq) => (
+              <div key={rfq.id} className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-sm text-zinc-100">{rfq.title} ({rfq.rfqNumber})</span>
+                  <Badge tone="blue">{rfq.status}</Badge>
+                </div>
+                <div className="text-xs text-zinc-400">Received Bids: {rfq.quotes?.length ?? 0} suppliers</div>
+              </div>
+            ))
           )}
         </CardBody>
       </Card>

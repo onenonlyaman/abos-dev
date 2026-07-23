@@ -1,4 +1,6 @@
-import type { LeadState, PurchaseOrderStatus, TaskStatus, VehicleStatus } from './types';
+import type { LeadState, PurchaseOrderStatus, TaskStatus, VehicleStatus, Project, Unit } from './types';
+
+export type LostReason = 'price' | 'location' | 'competitor' | 'financing' | 'no_response' | 'other';
 
 export interface Lead {
   id: string;
@@ -7,7 +9,14 @@ export interface Lead {
   email?: string | null;
   source: string;
   state: LeadState;
-  lostReason?: string | null;
+  lostReason?: LostReason | null;
+  projectId?: string | null;
+  project?: Project | null;
+  unitId?: string | null;
+  unit?: Unit | null;
+  assignedToId?: string | null;
+  assignedTo?: { id: string; name: string } | null;
+  createdAt: string;
 }
 
 export interface Vendor {

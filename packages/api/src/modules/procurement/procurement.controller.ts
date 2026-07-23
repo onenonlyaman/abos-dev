@@ -1,45 +1,52 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { IsUUID } from 'class-validator';
+import { Controller, Get, Post, Body, Query } from '@nestjs/common';
 import { ProcurementService } from './procurement.service';
-import { CreateVendorDto } from './dto/create-vendor.dto';
-import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 
-class ApprovePurchaseOrderDto {
-  @IsUUID()
-  approvedById!: string;
-}
+@Controller('procurement')
+export class ProcurementController {
+  constructor(private readonly procurementService: ProcurementService) {}
 
-@Controller('vendors')
-export class VendorController {
-  constructor(private readonly procurement: ProcurementService) {}
-
-  @Post()
-  create(@Body() dto: CreateVendorDto) {
-    return this.procurement.createVendor(dto);
+  @Get('vendors')
+  getVendors() {
+    return this.procurementService.getVendors();
   }
 
-  @Get()
-  list() {
-    return this.procurement.listVendors();
-  }
-}
-
-@Controller('purchase-orders')
-export class PurchaseOrderController {
-  constructor(private readonly procurement: ProcurementService) {}
-
-  @Post()
-  create(@Body() dto: CreatePurchaseOrderDto) {
-    return this.procurement.createPurchaseOrder(dto);
+  @Get('purchase-orders')
+  getPurchaseOrders(@Query('projectId') projectId?: string) {
+    return this.procurementService.getPurchaseOrders(projectId);
   }
 
-  @Get()
-  list(@Query('projectId') projectId?: string) {
-    return this.procurement.listPurchaseOrders(projectId);
+  @Get('requisitions')
+  getRequisitions() {
+    return this.procurementService.getRequisitions();
   }
 
-  @Post(':id/approve')
-  approve(@Param('id') id: string, @Body() dto: ApprovePurchaseOrderDto) {
-    return this.procurement.approvePurchaseOrder(id, dto.approvedById);
+  @Post('requisitions')
+  createRequisition(@Body() body: any) {
+    return this.procurementService.createRequisition(body);
+  }
+
+  @Get('rfqs')
+  getRfqs() {
+    return this.procurementService.getRfqs();
+  }
+
+  @Post('rfqs')
+  createRfq(@Body() body: any) {
+    return this.procurementService.createRfq(body);
+  }
+
+  @Post('rfqs/quotes')
+  addVendorQuote(@Body() body: any) {
+    return this.procurementService.addVendorQuote(body);
+  }
+
+  @Get('grns')
+  getGrns() {
+    return this.procurementService.getGrns();
+  }
+
+  @Post('grns')
+  createGrn(@Body() body: any) {
+    return this.procurementService.createGrn(body);
   }
 }

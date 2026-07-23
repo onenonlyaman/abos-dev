@@ -1,37 +1,68 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Truck } from 'lucide-react';
-import { api, ApiError } from '@/lib/api';
-import type { Vehicle } from '@/lib/types-extra';
+import React, { useEffect, useState, useCallback } from 'react';
+import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Stat } from '@/components/ui/stat';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Table, Thead, Th, Td, Tr } from '@/components/ui/table';
+import { Disclosure } from '@/components/ui/disclosure';
+import { Button } from '@/components/ui/button';
+import { Field } from '@/components/ui/field';
+import { api, ApiError } from '@/lib/api';
+import { Truck, Wrench, Fuel, ShieldCheck, PlusCircle } from 'lucide-react';
 
-const TONE: Record<string, 'green' | 'amber' | 'red'> = {
-  active: 'green',
-  maintenance: 'amber',
-  decommissioned: 'red',
-};
+interface Maintenance {
+  id: string;
+  assetName: string;
+  maintenanceType: string;
+  scheduledDate: string;
+  status: string;
+}
+
+interface FuelLog {
+  id: string;
+  vehicleName: string;
+  fuelLitres: number;
+  costAmount: number;
+  loggedAt: string;
+}
+
+interface AmcContract {
+  id: string;
+  providerName: string;
+  equipmentCovered: string;
+  validTo: string;
+  annualCost: number;
+}
 
 export default function FleetPage() {
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [maintenances, setMaintenances] = useState<Maintenance[]>([]);
+  const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([]);
+  const [amcs, setAmcs] = useState<AmcContract[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
-  const [name, setName] = useState('');
-  const [plateNumber, setPlateNumber] = useState('');
+  // Form states
+  const [assetName, setAssetName] = useState('');
+  const [maintType, setMaintType] = useState('Hydraulic & Brake Inspection');
+
+  const [vehicleName, setVehicleName] = useState('');
+  const [fuelLitres, setFuelLitres] = useState('');
+  const [fuelCost, setFuelCost] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setVehicles(await api.get<Vehicle[]>('/vehicles'));
+      const [m, f, a] = await Promise.all([
+        api.get<Maintenance[]>('/fleet/maintenance'),
+        api.get<FuelLog[]>('/fleet/fuel'),
+        api.get<AmcContract[]>('/fleet/amc'),
+      ]);
+      setMaintenances(m);
+      setFuelLogs(f);
+      setAmcs(a);
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Failed to reach API');
-    } finally {
-      setLoading(false);
+      setErr(e instanceof ApiError ? e.message : 'Failed to load fleet maintenance data');
     }
   }, []);
 
@@ -39,75 +70,114 @@ export default function FleetPage() {
     load();
   }, [load]);
 
+  const handleCreateMaintenance = async () => {
+    if (!assetName) return;
+    setBusy(true);
+    try {
+      await api.post('/fleet/maintenance', {
+        assetName,
+        maintenanceType: maintType,
+      });
+      setAssetName('');
+      await load();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Failed to schedule maintenance');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCreateFuel = async () => {
+    if (!vehicleName || !fuelLitres) return;
+    setBusy(true);
+    try {
+      await api.post('/fleet/fuel', {
+        vehicleName,
+        fuelLitres: Number(fuelLitres) || 0,
+        costAmount: Number(fuelCost) || 0,
+      });
+      setVehicleName('');
+      setFuelLitres('');
+      setFuelCost('');
+      await load();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Failed to log fuel consumption');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const totalFuelCost = fuelLogs.reduce((acc, f) => acc + Number(f.costAmount), 0);
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-lg font-semibold text-zinc-900">Fleet</h1>
-        <p className="mt-1 text-sm text-zinc-500">Vehicle and machine tracking across sites.</p>
+    <div className="space-y-7">
+      <PageHeader
+        title="Fleet, Machinery & Equipment Maintenance Suite"
+        description="Site machinery register, preventive maintenance schedules, diesel fuel logging, and AMC warranty tracking."
+      />
+
+      {err && <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl">{err}</div>}
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Stat icon={Wrench} tone="brand" value={String(maintenances.length)} label="Maintenance Jobs" sub="Preventive Scheduled" />
+        <Stat icon={Fuel} tone="green" value={`₹ ${totalFuelCost.toLocaleString()}`} label="Fuel Expenditure" sub="Diesel Consumption" />
+        <Stat icon={ShieldCheck} tone="blue" value={String(amcs.length)} label="AMC Contracts" sub="Annual Maintenance" />
+        <Stat icon={Truck} tone="amber" value="100%" label="Fleet Readiness" sub="Operational" />
       </div>
 
-      <Card>
-        <CardHeader title="New vehicle" />
-        <CardBody>
-          <div className="grid grid-cols-3 gap-3">
-            <input className="input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-            <input
-              className="input"
-              placeholder="Plate number"
-              value={plateNumber}
-              onChange={(e) => setPlateNumber(e.target.value)}
-            />
-            <Button
-              disabled={busy || !name || !plateNumber}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await api.post('/vehicles', { name, plateNumber });
-                  setName('');
-                  setPlateNumber('');
-                  await load();
-                } catch (e) {
-                  setErr(e instanceof ApiError ? e.message : 'Request failed');
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Add vehicle
+      {/* Action Panels */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Disclosure title="Schedule Preventive Equipment Maintenance">
+          <div className="space-y-3">
+            <Field label="Equipment / Machine Name" placeholder="e.g. Tower Crane #1 - Site A" value={assetName} onChange={(e) => setAssetName(e.target.value)} />
+            <Field label="Maintenance Type" value={maintType} onChange={(e) => setMaintType(e.target.value)} />
+            <Button size="sm" className="w-full" disabled={busy || !assetName} onClick={handleCreateMaintenance}>
+              <PlusCircle className="w-3.5 h-3.5 mr-1.5" /> Schedule Maintenance
             </Button>
           </div>
-          {err && <p className="mt-3 text-sm text-red-600">{err}</p>}
-        </CardBody>
-      </Card>
+        </Disclosure>
 
-      <Card>
-        <CardHeader title="Fleet" />
-        <CardBody className="p-0">
-          {loading ? (
-            <p className="p-5 text-sm text-zinc-500">Loading…</p>
-          ) : vehicles.length === 0 ? (
-            <div className="p-5">
-              <EmptyState icon={Truck} title="No vehicles yet" description="Add your first vehicle above." />
+        <Disclosure title="Log Diesel Fuel Refill">
+          <div className="space-y-3">
+            <Field label="Vehicle / Generator Name" placeholder="e.g. JCB Excavator 3DX" value={vehicleName} onChange={(e) => setVehicleName(e.target.value)} />
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Fuel Volume (Litres)" type="number" placeholder="60" value={fuelLitres} onChange={(e) => setFuelLitres(e.target.value)} />
+              <Field label="Total Cost (₹)" type="number" placeholder="5400" value={fuelCost} onChange={(e) => setFuelCost(e.target.value)} />
             </div>
+            <Button size="sm" className="w-full" disabled={busy || !vehicleName || !fuelLitres} onClick={handleCreateFuel}>
+              <PlusCircle className="w-3.5 h-3.5 mr-1.5" /> Record Fuel Refill
+            </Button>
+          </div>
+        </Disclosure>
+      </div>
+
+      {/* Maintenance Schedules Table */}
+      <Card>
+        <CardHeader title="Preventive Maintenance Calendar" description="Upcoming inspections and servicing jobs" />
+        <CardBody className="p-0 overflow-x-auto">
+          {maintenances.length === 0 ? (
+            <div className="p-5 text-center text-xs text-zinc-500">No maintenance jobs scheduled.</div>
           ) : (
-            <Table>
-              <Thead>
-                <Th>Name</Th>
-                <Th>Plate</Th>
-                <Th>Status</Th>
-              </Thead>
-              <tbody>
-                {vehicles.map((v) => (
-                  <Tr key={v.id}>
-                    <Td className="font-medium text-zinc-900">{v.name}</Td>
-                    <Td>{v.plateNumber}</Td>
-                    <Td>
-                      <Badge tone={TONE[v.status]}>{v.status}</Badge>
-                    </Td>
-                  </Tr>
+            <table className="w-full text-left text-xs">
+              <thead className="bg-zinc-950 text-zinc-400 uppercase border-b border-zinc-800">
+                <tr>
+                  <th className="p-3.5">Asset</th>
+                  <th className="p-3.5">Inspection Type</th>
+                  <th className="p-3.5">Scheduled Date</th>
+                  <th className="p-3.5">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800 text-zinc-200">
+                {maintenances.map((m) => (
+                  <tr key={m.id} className="hover:bg-zinc-900/60 transition">
+                    <td className="p-3.5 font-medium text-zinc-100">{m.assetName}</td>
+                    <td className="p-3.5 text-zinc-400">{m.maintenanceType}</td>
+                    <td className="p-3.5 font-mono text-zinc-300">{new Date(m.scheduledDate).toLocaleDateString()}</td>
+                    <td className="p-3.5"><Badge tone="amber">{m.status}</Badge></td>
+                  </tr>
                 ))}
               </tbody>
-            </Table>
+            </table>
           )}
         </CardBody>
       </Card>

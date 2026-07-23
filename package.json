@@ -15,6 +15,9 @@
     "migrate": "npm run prisma:migrate -w packages/api",
     "seed": "npm run prisma:seed -w packages/api"
   },
+  "prisma": {
+    "seed": "ts-node packages/api/prisma/seed.ts"
+  },
   "allowScripts": {
     "@nestjs/core@10.4.22": true,
     "@prisma/client@5.22.0": true,
@@ -23,6 +26,8 @@
     "prisma@5.22.0": true
   },
   "devDependencies": {
-    "concurrently": "^10.0.3"
+    "concurrently": "^10.0.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
   }
 }

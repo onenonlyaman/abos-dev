@@ -19,4 +19,4 @@ COPY --from=builder /app/packages/api/prisma /app/packages/api/prisma
 
 EXPOSE 3001
 ENV PORT=3001
-CMD ["sh", "-c", "npx prisma db push --schema=prisma/schema.prisma && (npx prisma db seed || true) && (node dist/src/main.js || node dist/main.js)"]
+CMD ["sh", "-c", "npx prisma db push --schema=prisma/schema.prisma && (npx ts-node prisma/seed.ts || true) && (node dist/src/main.js || node dist/main.js)"]

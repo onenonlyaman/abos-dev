@@ -1,0 +1,356 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enums ----------
+
+enum LeadState {
+  new
+  contacted
+  qualified
+  site_visit_scheduled
+  site_visit_done
+  negotiation
+  booked
+  lost
+}
+
+enum LostReason {
+  price
+  location
+  competitor
+  financing
+  no_response
+  other
+}
+
+enum UnitStatus {
+  available
+  held
+  booked
+}
+
+enum BookingState {
+  draft
+  payment_pending
+  confirmed
+  agreement_signed
+  cancelled
+}
+
+enum PaymentStatus {
+  pending
+  cleared
+  failed
+  refunded
+}
+
+enum PurchaseOrderStatus {
+  draft
+  pending_approval
+  approved
+  rejected
+  grn_received
+  invoiced
+}
+
+enum TaskStatus {
+  open
+  in_progress
+  in_qa
+  closed
+}
+
+enum VehicleStatus {
+  active
+  maintenance
+  decommissioned
+}
+
+// ---------- Core: SPV / Project / Unit ----------
+
+model Spv {
+  id        String    @id @default(uuid())
+  name      String
+  legalName String
+  gstin     String    @unique
+  createdAt DateTime  @default(now())
+  projects  Project[]
+
+  @@map("spvs")
+}
+
+model Project {
+  id        String   @id @default(uuid())
+  spvId     String
+  spv       Spv      @relation(fields: [spvId], references: [id])
+  name      String
+  code      String   @unique
+  city      String
+  createdAt DateTime @default(now())
+
+  units       Unit[]
+  skus        Sku[]
+  budgetLines BudgetLine[]
+  tasks       Task[]
+  leads       Lead[]
+  purchaseOrders PurchaseOrder[]
+  vehicles    Vehicle[]
+
+  @@map("projects")
+}
+
+model Unit {
+  id        String     @id @default(uuid())
+  projectId String
+  project   Project    @relation(fields: [projectId], references: [id])
+  code      String
+  floor     Int
+  areaSqft  Decimal    @db.Decimal(10, 2)
+  baseRate  Decimal    @db.Decimal(14, 2)
+  status    UnitStatus @default(available)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  bookings Booking[]
+  leads    Lead[]
+
+  @@unique([projectId, code])
+  @@index([status])
+  @@map("units")
+}
+
+// ---------- Sales CRM ----------
+
+model Lead {
+  id             String      @id @default(uuid())
+  name           String
+  phone          String
+  email          String?
+  source         String
+  state          LeadState   @default(new)
+  lostReason     LostReason?
+  projectId      String?
+  project        Project?    @relation(fields: [projectId], references: [id])
+  unitId         String?
+  unit           Unit?       @relation(fields: [unitId], references: [id])
+  assignedToId   String?
+  assignedTo     Employee?   @relation(fields: [assignedToId], references: [id])
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([phone])
+  @@index([state])
+  @@map("leads")
+}
+
+// ---------- Booking (core module) ----------
+
+model Booking {
+  id                String       @id @default(uuid())
+  unitId            String
+  unit              Unit         @relation(fields: [unitId], references: [id])
+  customerName      String
+  customerPhone     String
+  state             BookingState @default(draft)
+  holdExpiresAt     DateTime?
+  agreementSignedAt DateTime?
+  cancelledAt       DateTime?
+  cancelReason      String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  payments Payment[]
+
+  @@index([state])
+  @@index([unitId])
+  @@map("bookings")
+}
+
+model Payment {
+  id         String        @id @default(uuid())
+  bookingId  String
+  booking    Booking       @relation(fields: [bookingId], references: [id])
+  amount     Decimal       @db.Decimal(14, 2)
+  status     PaymentStatus @default(pending)
+  method     String
+  reference  String?
+  clearedAt  DateTime?
+  createdAt  DateTime      @default(now())
+
+  @@index([bookingId])
+  @@map("payments")
+}
+
+// ---------- Procurement ----------
+
+model Vendor {
+  id             String   @id @default(uuid())
+  name           String
+  gstin          String   @unique
+  qualityScore   Decimal  @db.Decimal(3, 2) @default(0)
+  createdAt      DateTime @default(now())
+
+  purchaseOrders PurchaseOrder[]
+
+  @@map("vendors")
+}
+
+model PurchaseOrder {
+  id             String              @id @default(uuid())
+  vendorId       String
+  vendor         Vendor              @relation(fields: [vendorId], references: [id])
+  projectId      String
+  project        Project             @relation(fields: [projectId], references: [id])
+  status         PurchaseOrderStatus @default(draft)
+  createdById    String
+  createdBy      Employee            @relation("po_creator", fields: [createdById], references: [id])
+  approvedById   String?
+  approvedBy     Employee?           @relation("po_approver", fields: [approvedById], references: [id])
+  createdAt      DateTime            @default(now())
+
+  lines PurchaseOrderLine[]
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  skuId           String
+  sku             Sku           @relation(fields: [skuId], references: [id])
+  quantity        Decimal       @db.Decimal(14, 3)
+  actualCost      Decimal       @db.Decimal(14, 2)
+  actualUnitCost  Decimal       @db.Decimal(14, 4)
+  deviationFlagged Boolean      @default(false)
+
+  @@map("purchase_order_lines")
+}
+
+// ---------- Inventory ----------
+
+model Sku {
+  id           String   @id @default(uuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id])
+  code         String
+  name         String
+  uom          String
+  formula      String?
+  currentStock Decimal  @db.Decimal(14, 3) @default(0)
+  safetyStock  Decimal  @db.Decimal(14, 3) @default(0)
+  createdAt    DateTime @default(now())
+
+  budgetLines BudgetLine[]
+  poLines     PurchaseOrderLine[]
+
+  @@unique([projectId, code])
+  @@map("skus")
+}
+
+// ---------- Finance / Budget ----------
+
+model BudgetLine {
+  id               String   @id @default(uuid())
+  projectId        String
+  project          Project  @relation(fields: [projectId], references: [id])
+  skuId            String
+  sku              Sku      @relation(fields: [skuId], references: [id])
+  allocatedCap     Decimal  @db.Decimal(16, 2)
+  expectedQty      Decimal  @db.Decimal(14, 3)
+  consumedAmount   Decimal  @db.Decimal(16, 2) @default(0)
+  createdAt        DateTime @default(now())
+
+  @@unique([projectId, skuId])
+  @@map("budget_lines")
+}
+
+// ---------- Task Tracking ----------
+
+model Task {
+  id             String    @id @default(uuid())
+  projectId      String?
+  project        Project?  @relation(fields: [projectId], references: [id])
+  title          String
+  description    String?
+  assignerId     String
+  assigner       Employee  @relation("task_assigner", fields: [assignerId], references: [id])
+  assigneeId     String
+  assignee       Employee  @relation("task_assignee", fields: [assigneeId], references: [id])
+  startedAt      DateTime  @default(now())
+  targetDeadline DateTime
+  status         TaskStatus @default(open)
+  closedAt       DateTime?
+  closedEarly    Boolean   @default(false)
+
+  reassignments TaskReassignmentLog[]
+
+  @@map("tasks")
+}
+
+model TaskReassignmentLog {
+  id               String   @id @default(uuid())
+  taskId           String
+  task             Task     @relation(fields: [taskId], references: [id])
+  reassignedById   String
+  reassignedBy     Employee @relation("reassigner", fields: [reassignedById], references: [id])
+  fromAssigneeId   String
+  toAssigneeId     String
+  reason           String
+  createdAt        DateTime @default(now())
+
+  @@map("task_reassignment_logs")
+}
+
+// ---------- HR ----------
+
+model Employee {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  role      String
+  createdAt DateTime @default(now())
+
+  sessions       EmployeeSession[]
+  leadsAssigned  Lead[]
+  tasksAssigned  Task[]                @relation("task_assignee")
+  tasksGiven     Task[]                @relation("task_assigner")
+  reassignments  TaskReassignmentLog[] @relation("reassigner")
+  posCreated     PurchaseOrder[]       @relation("po_creator")
+  posApproved    PurchaseOrder[]       @relation("po_approver")
+
+  @@map("employees")
+}
+
+model EmployeeSession {
+  id         String    @id @default(uuid())
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id])
+  loginAt    DateTime  @default(now())
+  logoutAt   DateTime?
+  ipAddress  String
+  device     String
+
+  @@map("employee_sessions")
+}
+
+// ---------- Fleet ----------
+
+model Vehicle {
+  id                String        @id @default(uuid())
+  name              String
+  plateNumber       String        @unique
+  status            VehicleStatus @default(active)
+  assignedProjectId String?
+  assignedProject   Project?      @relation(fields: [assignedProjectId], references: [id])
+  lastMaintenanceAt DateTime?
+  createdAt         DateTime      @default(now())
+
+  @@map("vehicles")
+}

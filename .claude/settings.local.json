@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm -v)",
+      "Bash(docker -v)",
+      "Bash(docker compose *)",
+      "Bash(git --version)",
+      "Bash(powershell -Command \"Start-Process 'C:\\\\Program Files\\\\Docker\\\\Docker\\\\Docker Desktop.exe'\")",
+      "Bash(git init *)",
+      "Bash(npm install *)",
+      "Bash(npm approve-scripts *)",
+      "Bash(npm rebuild *)",
+      "Bash(npx prisma *)",
+      "Bash(docker exec *)",
+      "Bash(PGPASSWORD=abos_dev_password psql -h localhost -p 5432 -U abos -d abos -c \"select 1;\")",
+      "Bash(docker port *)",
+      "Bash(netstat -ano)",
+      "Bash(powershell -Command \"Get-Process -Id 12576,22904 -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,Path\")",
+      "Bash(powershell -Command \"Get-Process -Id 37828 -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,Path\")",
+      "Bash(PGPASSWORD=abos_dev_password psql -h localhost -p 55432 -U abos -d abos -c \"select 1;\")",
+      "Bash(npm run *)",
+      "Bash(echo \"started with pid $!\")",
+      "Bash(curl -s http://localhost:3001/units)"
+    ]
+  }
+}

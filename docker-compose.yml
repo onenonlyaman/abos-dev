@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: abos_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: abos
+      POSTGRES_PASSWORD: abos_dev_password
+      POSTGRES_DB: abos
+    ports:
+      - "55432:5432"
+    volumes:
+      - abos_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U abos -d abos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: abos_redis
+    restart: unless-stopped
+    ports:
+      - "56379:6379"
+    volumes:
+      - abos_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  abos_postgres_data:
+  abos_redis_data:

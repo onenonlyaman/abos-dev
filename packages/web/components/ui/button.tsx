@@ -5,18 +5,18 @@ import { cn } from '@/lib/utils';
 import { forwardRef } from 'react';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
+  'inline-flex items-center justify-center gap-1.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-colors disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
   {
     variants: {
       variant: {
-        primary: 'bg-brand text-white hover:bg-brand-ink',
-        secondary: 'bg-surface text-ink ring-1 ring-inset ring-line-strong hover:bg-surface-2',
-        danger: 'bg-danger text-white hover:opacity-90',
+        primary: 'bg-brand text-brand-ink hover:opacity-90 border border-brand',
+        secondary: 'bg-surface-2 text-ink border border-line hover:bg-surface',
+        danger: 'bg-surface text-ink border border-line-strong hover:bg-surface-2',
         ghost: 'text-ink-2 hover:bg-surface-2',
       },
       size: {
-        sm: 'h-8 px-3',
-        md: 'h-9 px-4',
+        sm: 'h-7 px-2.5',
+        md: 'h-8 px-3.5',
       },
     },
     defaultVariants: { variant: 'primary', size: 'md' },

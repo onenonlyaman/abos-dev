@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ShieldAlert, Users, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { CheckCircle2, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
 export default function WorkspacesPage() {
@@ -38,15 +39,15 @@ export default function WorkspacesPage() {
     { name: 'Legal Head', group: 'People & Legal', desc: 'RERA filings, land title deeds, and contract agreements.', primaryPath: '/legal' },
     { name: 'Documentation Team', group: 'People & Legal', desc: 'Agreement drafting, stamp duty execution, and customer document vault.', primaryPath: '/legal' },
 
-    { name: 'Channel Partner', group: 'External Portal', desc: 'Broker lead registration, commission tracking, and inventory availability.', primaryPath: '/leads' },
-    { name: 'Customer', group: 'External Portal', desc: 'Construction progress photos, payment milestone status, and possession tracker.', primaryPath: '/booking' },
+    { name: 'Channel Partner', group: 'External Portal', desc: 'Broker lead registration, commission tracking, and inventory availability.', primaryPath: '/portal/partner' },
+    { name: 'Customer', group: 'External Portal', desc: 'Construction progress photos, payment milestone status, and possession tracker.', primaryPath: '/portal/customer' },
     { name: 'Super Admin', group: 'Administration', desc: 'Full RBAC permission management, audit logs, and system settings.', primaryPath: '/' },
   ];
 
   const activeRoleData = roles.find((r) => r.name === activeRole) || roles[0];
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-6">
       <PageHeader
         title="Role-Based Workspaces (24 Dedicated Roles)"
         description="Switch user personas to view role-tailored dashboards, KPIs, navigation, and permission boundaries."
@@ -57,23 +58,23 @@ export default function WorkspacesPage() {
           title="Role Switcher & Persona Workspace"
           description="Select any role persona to preview custom dashboard scope"
         />
-        <CardBody className="space-y-6">
+        <CardBody className="space-y-5">
           {/* Active Workspace Banner */}
-          <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="p-4 rounded-md bg-surface-2 border border-line flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center space-x-2">
                 <Badge tone="blue">{activeRoleData.group}</Badge>
-                <span className="text-xs text-emerald-400 flex items-center space-x-1">
+                <span className="text-xs text-ink font-semibold flex items-center space-x-1 uppercase tracking-wider">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Workspace Active</span>
                 </span>
               </div>
-              <h3 className="text-lg font-bold text-zinc-100">{activeRoleData.name} Workspace</h3>
-              <p className="text-xs text-zinc-400">{activeRoleData.desc}</p>
+              <h3 className="text-base font-bold text-ink uppercase tracking-wider">{activeRoleData.name} Workspace</h3>
+              <p className="text-xs text-ink-2">{activeRoleData.desc}</p>
             </div>
             <Link
               href={activeRoleData.primaryPath}
-              className="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition shrink-0"
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-brand text-brand-ink text-xs font-semibold rounded-md transition uppercase tracking-wider border border-brand shrink-0 hover:opacity-90"
             >
               <span>Launch Workspace</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -81,22 +82,22 @@ export default function WorkspacesPage() {
           </div>
 
           {/* 24 Roles Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
             {roles.map((r, idx) => (
               <button
                 key={idx}
                 onClick={() => setActiveRole(r.name)}
-                className={`p-3.5 rounded-xl border text-left transition flex flex-col justify-between space-y-2 ${
+                className={`p-3 rounded-md border text-left transition flex flex-col justify-between space-y-2 ${
                   activeRole === r.name
-                    ? 'bg-indigo-600/10 border-indigo-500/50 text-zinc-100 shadow-md'
-                    : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-300 hover:bg-zinc-800/60'
+                    ? 'bg-surface-2 border-brand text-ink shadow-sm'
+                    : 'bg-surface border-line text-ink-2 hover:bg-surface-2'
                 }`}
               >
                 <div className="flex items-center justify-between w-full">
-                  <span className="font-semibold text-xs text-zinc-100">{r.name}</span>
-                  <span className="text-[10px] text-zinc-500 font-mono">{r.group}</span>
+                  <span className="font-bold text-xs uppercase tracking-wider text-ink">{r.name}</span>
+                  <span className="text-[9.5px] text-ink-3 uppercase font-mono">{r.group}</span>
                 </div>
-                <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed">{r.desc}</p>
+                <p className="text-[11px] text-ink-3 line-clamp-2 leading-relaxed">{r.desc}</p>
               </button>
             ))}
           </div>
